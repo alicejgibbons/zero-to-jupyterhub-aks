@@ -1,0 +1,70 @@
+proxy:
+  https:
+    hosts:
+      - <your-https-host-here>
+    letsencrypt: 
+      contactEmail: <admin-email-here>
+  secretToken: <generated-base64-secret-token>
+
+singleuser:
+  image:
+    name: <acr-server>.azurecr.io/<acr-repo>/<container-image>
+    tag: v1
+  memory: 
+    limit: 16G
+    guarantee: 2G
+  storage:
+    extraVolumes:
+      - name: jupyterhub-shared
+        persistentVolumeClaim:
+          claimName: pvc-azurefile
+      - name: kvsecret
+        flexVolume:
+          driver: "azure/kv"
+          secretRef:
+            name: kvcreds
+          options:
+            usepodidentity: "false"
+            keyvaultname: <Azure-key-vault-name>
+            keyvaultobjectnames: secret1;secret2
+            keyvaultobjecttypes: secret;secret
+            resourcegroup: <Azure-resource-group>
+            subscriptionid: <Azure-subscription-id>
+            tenantid: <AAD-tenant-id>
+    extraVolumeMounts:
+      - name: jupyterhub-shared
+        mountPath: /home/jovyan/shared
+      - name: kvsecret
+        mountPath: /kvmnt
+        readOnly: true
+
+hub:
+  extraEnv:
+    AAD_TENANT_ID: <AAD-tenant-id>
+  extraConfig:
+    myConfig: |
+      origin = '*'
+      c.JupyterHub.tornado_settings = {
+        'headers': {
+          'Access-Control-Allow-Origin': origin,
+        },
+      }
+      c.Spawner.args = ['--NotebookApp.allow_origin={0}'.format(origin)]
+      c.NotebookApp.allow_remote_access = True
+      c.NotebookApp.allow_origin = '*'      
+      c.Spawner.notebook_dir= '/home/jovyan'
+
+auth:
+  admin: 
+    access: true
+    users:
+      - 'alice gibbons'
+      - 'hubert duan'
+  type: custom
+  custom:
+    className: "oauthenticator.azuread.AzureAdOAuthenticator"
+    config:
+      tenant_id: <AAD-tenant-id>
+      client_id: <SP-client-id>
+      client_secret: <SP-client-secret>
+      oauth_callback_url: "https://<your-jupyterhub-host>/hub/oauth_callback"
